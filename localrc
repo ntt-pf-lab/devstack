@@ -35,13 +35,11 @@ SERVICE_TOKEN=servicetoken
 ADMIN_PASSWORD=adminpass
 
 
-#export HTTP_PROXY=http://proxy2.rdh.ecl.ntt.co.jp:20066/
-#export HTTPS_PROXY=${HTTP_PROXY}
-#export http_proxy=${HTTP_PROXY}
-#export https_proxy=${HTTP_PROXY}
-#export GIT_PROXY_COMMAND=/home/nova01/git-proxy.sh
 
-alias wget='~/proxy.sh wget'
-
-HOST_IP=`LC_ALL=C /sbin/ifconfig eth1 | grep -m 1 'inet addr:'| cut -d: -f2 | awk '{print $1}'`
+DEST=/home/ishii/workspace/ds.iida_20111013
+HOST_IP=192.168.1.1
+NET_MAN=VlanManager
+PUBLIC_INTERFACE=wlan0
+VLAN_INTERFACE=wlan0
+FLAT_INTERFACE=wlan0
 

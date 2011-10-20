@@ -27,6 +27,10 @@ NOVACLIENT_BRANCH=master
 #OPENSTACKX_REPO=https://github.com/cloudbuilders/openstackx.git
 #OPENSTACKX_BRANCH=diablo
 
+# network service
+QUANTUM_REPO=https://github.com/openstack/quantum.git
+QUANTUM_BRANCH=2011.3
+
 
 
 MYSQL_PASS=nova
@@ -36,9 +40,9 @@ ADMIN_PASSWORD=adminpass
 
 
 
-DEST=/home/ishii/workspace/ds.iida_20111013
-HOST_IP=192.168.1.1
-NET_MAN=VlanManager
+DEST=/home/ishii/workspace/ds.20111014
+HOST_IP=192.168.10.1
+NET_MAN=nova.network.quantum.manager.QuantumManager
 PUBLIC_INTERFACE=wlan0
 VLAN_INTERFACE=wlan0
 FLAT_INTERFACE=wlan0

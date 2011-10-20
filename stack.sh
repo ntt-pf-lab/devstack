@@ -121,9 +121,10 @@ KEYSTONE_DIR=$DEST/keystone
 NOVACLIENT_DIR=$DEST/python-novaclient
 OPENSTACKX_DIR=$DEST/openstackx
 NOVNC_DIR=$DEST/noVNC
+QUANTUM_DIR=$DEST/quantum
 
 # Specify which services to launch.  These generally correspond to screen tabs
-ENABLED_SERVICES=${ENABLED_SERVICES:-g-api,g-reg,key,n-api,n-cpu,n-net,n-sch,n-vnc,dash,mysql,rabbit}
+ENABLED_SERVICES=${ENABLED_SERVICES:-g-api,g-reg,key,n-api,n-cpu,n-net,n-sch,n-vnc,dash,mysql,rabbit,qua,q-a}
 
 # Nova hypervisor configuration.  We default to **kvm** but will drop back to
 # **qemu** if we are unable to load the kvm module.  Stack.sh can also install
@@ -149,7 +150,7 @@ PUBLIC_INTERFACE=${PUBLIC_INTERFACE:-eth0}
 FIXED_RANGE=${FIXED_RANGE:-10.0.0.0/24}
 FIXED_NETWORK_SIZE=${FIXED_NETWORK_SIZE:-256}
 FLOATING_RANGE=${FLOATING_RANGE:-172.24.4.1/28}
-NET_MAN=${NET_MAN:-FlatDHCPManager}
+NET_MAN=${NET_MAN:-nova.network.manager.FlatDHCPManager}
 EC2_DMZ_HOST=${EC2_DMZ_HOST:-$HOST_IP}
 FLAT_NETWORK_BRIDGE=${FLAT_NETWORK_BRIDGE:-br100}
 VLAN_INTERFACE=${VLAN_INTERFACE:-$PUBLIC_INTERFACE}
@@ -274,6 +275,8 @@ git_clone $NOVACLIENT_REPO $NOVACLIENT_DIR $NOVACLIENT_BRANCH
 # openstackx is a collection of extensions to openstack.compute & nova
 # that is *deprecated*.  The code is being moved into python-novaclient & nova.
 git_clone $OPENSTACKX_REPO $OPENSTACKX_DIR $OPENSTACKX_BRANCH
+# network service
+git_clone $QUANTUM_REPO $QUANTUM_DIR $QUANTUM_BRANCH
 
 # Initialization
 # ==============
@@ -349,16 +352,21 @@ fi
 
 if [[ "$ENABLED_SERVICES" =~ "dash" ]]; then
 
-    # Dash currently imports quantum even if you aren't using it.  Instead
-    # of installing quantum we can create a simple module that will pass the
-    # initial imports
-    mkdir -p  $DASH_DIR/openstack-dashboard/quantum || true
-    touch $DASH_DIR/openstack-dashboard/quantum/__init__.py
-    touch $DASH_DIR/openstack-dashboard/quantum/client.py
-
-
     # ``local_settings.py`` is used to override dashboard default settings.
     cp $FILES/dash_settings.py $DASH_DIR/openstack-dashboard/local/local_settings.py
+
+    if [[ "$ENABLED_SERVICES" =~ "qua" ]]; then
+        ln -sf $QUANTUM_DIR/quantum $DASH_DIR/openstack-dashboard/
+        sed -ie 's/QUANTUM_ENABLED = False/QUANTUM_ENABLED = True/' \
+            $DASH_DIR/openstack-dashboard/local/local_settings.py
+    else
+        # Dash currently imports quantum even if you aren't using it.  Instead
+        # of installing quantum we can create a simple module that will pass the
+        # initial imports
+        mkdir -p  $DASH_DIR/openstack-dashboard/quantum || true
+        touch $DASH_DIR/openstack-dashboard/quantum/__init__.py
+        touch $DASH_DIR/openstack-dashboard/quantum/client.py
+    fi
 
     cd $DASH_DIR/openstack-dashboard
     dashboard/manage.py syncdb
@@ -484,7 +492,7 @@ add_nova_flag "--verbose"
 add_nova_flag "--nodaemon"
 add_nova_flag "--scheduler_driver=$SCHEDULER"
 add_nova_flag "--dhcpbridge_flagfile=$NOVA_DIR/bin/nova.conf"
-add_nova_flag "--network_manager=nova.network.manager.$NET_MAN"
+add_nova_flag "--network_manager=$NET_MAN"
 add_nova_flag "--my_ip=$HOST_IP"
 add_nova_flag "--public_interface=$PUBLIC_INTERFACE"
 add_nova_flag "--vlan_interface=$VLAN_INTERFACE"
@@ -506,6 +514,12 @@ fi
 if [ -n "$MULTI_HOST" ]; then
     add_nova_flag "--multi_host=$MULTI_HOST"
 fi
+if [[ "$ENABLED_SERVICES" =~ "qua" ]]; then
+    add_nova_flag "--libvirt_ovs_integration_bridge=br-int"
+    add_nova_flag "--libvirt_vif_type=ethernet"
+    add_nova_flag "--libvirt_vif_driver=nova.virt.libvirt.vif.LibvirtOpenVswitchDriver"
+    add_nova_flag "--linuxnet_interface_driver=nova.network.linux_net.LinuxOVSInterfaceDriver"
+fi
 
 # Nova Database
 # ~~~~~~~~~~~~~
@@ -522,10 +536,13 @@ if [[ "$ENABLED_SERVICES" =~ "mysql" ]]; then
     $NOVA_DIR/bin/nova-manage db sync
 
     # create a small network
-    $NOVA_DIR/bin/nova-manage network create private $FIXED_RANGE 1 $FIXED_NETWORK_SIZE
-
+#    $NOVA_DIR/bin/nova-manage network create private $FIXED_RANGE 1 $FIXED_NETWORK_SIZE
     # create some floating ips
-    $NOVA_DIR/bin/nova-manage floating create $FLOATING_RANGE
+
+#    $NOVA_DIR/bin/nova-manage floating create $FLOATING_RANGE
+
+    mysql -u$MYSQL_USER -p$MYSQL_PASS -e 'DROP DATABASE IF EXISTS ovs_quantum;'
+    mysql -u$MYSQL_USER -p$MYSQL_PASS -e 'CREATE DATABASE ovs_quantum;'
 fi
 
 
@@ -551,6 +568,15 @@ if [[ "$ENABLED_SERVICES" =~ "key" ]]; then
     sudo sed -e "s,%ADMIN_PASSWORD%,$ADMIN_PASSWORD,g" -i $KEYSTONE_DATA
     # initialize keystone with default users/endpoints
     BIN_DIR=$KEYSTONE_DIR/bin bash $KEYSTONE_DATA
+fi
+
+
+# Quantum
+# --------
+
+if [[ "$ENABLED_SERVICES" =~ "qua" ]]; then
+    sed -e 's/SamplePlugin.FakePlugin/openvswitch.ovs_quantum_plugin.OVSQuantumPlugin/'\
+        -i $QUANTUM_DIR/quantum/plugins.ini
 fi
 
 
@@ -615,6 +641,8 @@ screen_it n-net "cd $NOVA_DIR && $NOVA_DIR/bin/nova-network"
 screen_it n-sch "cd $NOVA_DIR && $NOVA_DIR/bin/nova-scheduler"
 screen_it n-vnc "cd $NOVNC_DIR && ./utils/nova-wsproxy.py 6080 --web . --flagfile=../nova/bin/nova.conf"
 screen_it dash "cd $DASH_DIR && sudo /etc/init.d/apache2 restart; sudo tail -f /var/log/apache2/error.log"
+screen_it qua "cd $QUANTUM_DIR && $QUANTUM_DIR/bin/quantum $QUANTUM_DIR/etc/quantum.conf"
+screen_it q-a "cd $QUANTUM_DIR && sleep 10; sudo python quantum/plugins/openvswitch/agent/ovs_quantum_agent.py $QUANTUM_DIR/quantum/plugins/openvswitch/ovs_quantum_plugin.ini -v"
 
 # Install Images
 # ==============
@@ -666,9 +694,25 @@ if [[ "$ENABLED_SERVICES" =~ "g-reg" ]]; then
 
     RVAL=`glance add -A $SERVICE_TOKEN name="uec-natty-kernel" is_public=true container_format=aki disk_format=aki < $FILES/images/natty-server-cloudimg-amd64-vmlinuz-virtual`
     KERNEL_ID=`echo $RVAL | cut -d":" -f2 | tr -d " "`
-    glance add -A $SERVICE_TOKEN name="uec-natty" is_public=true container_format=ami disk_format=ami kernel_id=$KERNEL_ID < $FILES/images/natty-server-cloudimg-amd64.img
+#    glance add -A $SERVICE_TOKEN name="uec-natty" is_public=true container_format=ami disk_format=ami kernel_id=$KERNEL_ID < $FILES/images/natty-server-cloudimg-amd64.img
 
 fi
+
+
+# Quantum Manager
+# ==============
+
+#(iida-koji) currently, QuanumManager's ipam depends on project exist on nova-db
+$NOVA_DIR/bin/nova-manage user create --name=admin --access=secrete --secret=secrete
+$NOVA_DIR/bin/nova-manage user create --name=demo --access=secrete --secret=secrete
+#(iida-koji) quantum's keystone support is not integrated to quantum/dash, so tenant id/project id mapping is currently confusing
+$NOVA_DIR/bin/nova-manage project create --project=1 --user=admin
+$NOVA_DIR/bin/nova-manage project create --project=2 --user=demo
+#(iida-koji) create default network
+$NOVA_DIR/bin/nova-manage network create --label=private_1-1 --project_id=1 --fixed_range_v4=10.0.0.0/24 --bridge_interface=br-int --num_networks=1 --network_size=32
+$NOVA_DIR/bin/nova-manage network create --label=private_1-2 --project_id=1 --fixed_range_v4=10.0.1.0/24 --bridge_interface=br-int --num_networks=1 --network_size=32
+$NOVA_DIR/bin/nova-manage network create --label=private_2-1 --project_id=2 --fixed_range_v4=10.0.2.0/24 --bridge_interface=br-int --num_networks=1 --network_size=32
+
 
 # Fin
 # ===

@@ -284,13 +284,13 @@ git_clone $QUANTUM_REPO $QUANTUM_DIR $QUANTUM_BRANCH
 
 # setup our checkouts so they are installed into python path
 # allowing ``import nova`` or ``import glance.client``
-#cd $NOVA_DIR; sudo python setup.py develop
-#cd $NOVACLIENT_DIR; sudo python setup.py develop
-#cd $KEYSTONE_DIR; sudo python setup.py develop
-#cd $GLANCE_DIR; sudo python setup.py develop
-#cd $OPENSTACKX_DIR; sudo python setup.py develop
-#cd $DASH_DIR/django-openstack; sudo python setup.py develop
-#cd $DASH_DIR/openstack-dashboard; sudo python setup.py develop
+cd $NOVA_DIR; sudo python setup.py develop
+cd $NOVACLIENT_DIR; sudo python setup.py develop
+cd $KEYSTONE_DIR; sudo python setup.py develop
+cd $GLANCE_DIR; sudo python setup.py develop
+cd $OPENSTACKX_DIR; sudo python setup.py develop
+cd $DASH_DIR/django-openstack; sudo python setup.py develop
+cd $DASH_DIR/openstack-dashboard; sudo python setup.py develop
 
 # Add a useful screenrc.  This isn't required to run openstack but is we do
 # it since we are going to run the services in screen for simple

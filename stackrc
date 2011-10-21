@@ -28,8 +28,8 @@ OPENSTACKX_REPO=https://github.com/hisaharu/openstackx.git
 OPENSTACKX_BRANCH=int001
 
 # network service
-QUANTUM_REPO=https://github.com/openstack/quantum.git
-QUANTUM_BRANCH=2011.3
+QUANTUM_REPO=https://github.com/hisaharu/quantum.git
+QUANTUM_BRANCH=int001
 
 # allow local overrides of env variables
 if [ -f ./localrc ]; then

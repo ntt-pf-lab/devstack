@@ -3,32 +3,32 @@ NOVA_REPO=https://github.com/ntt-pf-lab/nova.git
 NOVA_BRANCH=int001
 
 # image catalog service
-GLANCE_REPO=https://github.com/openstack/glance.git
-GLANCE_BRANCH=2011.3
+GLANCE_REPO=https://github.com/ntt-pf-lab/glance.git
+GLANCE_BRANCH=int001
 
 # unified auth system (manages accounts/tokens)
-KEYSTONE_REPO=https://github.com/openstack/keystone.git
-KEYSTONE_BRANCH=2011.3
+KEYSTONE_REPO=https://github.com/ntt-pf-lab/keystone.git
+KEYSTONE_BRANCH=int001
 
 # a websockets/html5 or flash powered VNC console for vm instances
-NOVNC_REPO=https://github.com/hisaharu/noVNC.git
+NOVNC_REPO=https://github.com/ntt-pf-lab/noVNC.git
 NOVNC_BRANCH=int001
 
 # django powered web control panel for openstack
-DASH_REPO=https://github.com/hisaharu/horizon.git
+DASH_REPO=https://github.com/ntt-pf-lab/horizon.git
 DASH_BRANCH=int001
 
 # python client library to nova that dashboard (and others) use
-NOVACLIENT_REPO=https://github.com/hisaharu/python-novaclient.git
+NOVACLIENT_REPO=https://github.com/ntt-pf-lab/python-novaclient.git
 NOVACLIENT_BRANCH=int001
 
 # openstackx is a collection of extensions to openstack.compute & nova
 # that is *deprecated*.  The code is being moved into python-novaclient & nova.
-OPENSTACKX_REPO=https://github.com/hisaharu/openstackx.git
+OPENSTACKX_REPO=https://github.com/ntt-pf-lab/openstackx.git
 OPENSTACKX_BRANCH=int001
 
 # network service
-QUANTUM_REPO=https://github.com/hisaharu/quantum.git
+QUANTUM_REPO=https://github.com/ntt-pf-lab/quantum.git
 QUANTUM_BRANCH=int001
 
 # allow local overrides of env variables

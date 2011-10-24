@@ -13,7 +13,7 @@ OpenStack環境構築手順(Devstack+Quantum版)
 3. sudo apt-get install -y git
 4. git clone https://github.com/ntt-pf-lab/devstack.git
 5. cd devstack
-6. git checkout -b int001 origin/int001
+6. git checkout -b int002 origin/int002
 7. 必要に応じてlocalrcファイルを設定してください
 
 起動手順

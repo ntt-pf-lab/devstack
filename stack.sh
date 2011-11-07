@@ -519,6 +519,7 @@ if [[ "$ENABLED_SERVICES" =~ "qua" ]]; then
     add_nova_flag "--libvirt_vif_type=ethernet"
     add_nova_flag "--libvirt_vif_driver=nova.virt.libvirt.vif.LibvirtOpenVswitchDriver"
     add_nova_flag "--linuxnet_interface_driver=nova.network.linux_net.LinuxOVSInterfaceDriver"
+    add_nova_flag "--firewall_driver=nova.virt.libvirt.firewall.NullFirewallDriver"
 fi
 
 # Nova Database
@@ -655,7 +656,8 @@ screen_it q-a "cd $QUANTUM_DIR && sleep 10; sudo python quantum/plugins/openvswi
 #
 # Read more about cloud-init at https://help.ubuntu.com/community/CloudInit
 
-if [[ "$ENABLED_SERVICES" =~ "g-reg" ]]; then
+#if [[ "$ENABLED_SERVICES" =~ "g-reg" ]]; then
+if false; then
     # create a directory for the downloadedthe images tarballs.
     mkdir -p $FILES/images
 
@@ -702,16 +704,16 @@ fi
 # Quantum Manager
 # ==============
 
-#(iida-koji) currently, QuanumManager's ipam depends on project exist on nova-db
-$NOVA_DIR/bin/nova-manage user create --name=admin --access=secrete --secret=secrete
-$NOVA_DIR/bin/nova-manage user create --name=demo --access=secrete --secret=secrete
-#(iida-koji) quantum's keystone support is not integrated to quantum/dash, so tenant id/project id mapping is currently confusing
-$NOVA_DIR/bin/nova-manage project create --project=1 --user=admin
-$NOVA_DIR/bin/nova-manage project create --project=2 --user=demo
-#(iida-koji) create default network
-$NOVA_DIR/bin/nova-manage network create --label=private_1-1 --project_id=1 --fixed_range_v4=10.0.0.0/24 --bridge_interface=br-int --num_networks=1 --network_size=32
-$NOVA_DIR/bin/nova-manage network create --label=private_1-2 --project_id=1 --fixed_range_v4=10.0.1.0/24 --bridge_interface=br-int --num_networks=1 --network_size=32
-$NOVA_DIR/bin/nova-manage network create --label=private_2-1 --project_id=2 --fixed_range_v4=10.0.2.0/24 --bridge_interface=br-int --num_networks=1 --network_size=32
+##(iida-koji) currently, QuanumManager's ipam depends on project exist on nova-db
+#$NOVA_DIR/bin/nova-manage user create --name=admin --access=secrete --secret=secrete
+#$NOVA_DIR/bin/nova-manage user create --name=demo --access=secrete --secret=secrete
+##(iida-koji) quantum's keystone support is not integrated to quantum/dash, so tenant id/project id mapping is currently confusing
+#$NOVA_DIR/bin/nova-manage project create --project=1 --user=admin
+#$NOVA_DIR/bin/nova-manage project create --project=2 --user=demo
+##(iida-koji) create default network
+#$NOVA_DIR/bin/nova-manage network create --label=private_1-1 --project_id=1 --fixed_range_v4=10.0.0.0/24 --bridge_interface=br-int --num_networks=1 --network_size=32
+#$NOVA_DIR/bin/nova-manage network create --label=private_1-2 --project_id=1 --fixed_range_v4=10.0.1.0/24 --bridge_interface=br-int --num_networks=1 --network_size=32
+#$NOVA_DIR/bin/nova-manage network create --label=private_2-1 --project_id=2 --fixed_range_v4=10.0.2.0/24 --bridge_interface=br-int --num_networks=1 --network_size=32
 
 
 # Fin

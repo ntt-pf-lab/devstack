@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+LOGFILE=${LOGFILE:-"$PWD/stack.sh.$$.log"}
+(
 
 # **stack.sh** is an opinionated openstack developer installation.
 
@@ -214,8 +216,6 @@ SERVICE_TOKEN=${SERVICE_TOKEN:-`openssl rand -hex 12`}
 # so use 10 bytes
 ADMIN_PASSWORD=${ADMIN_PASSWORD:-`openssl rand -hex 10`}
 
-LOGFILE=${LOGFILE:-"$PWD/stack.sh.$$.log"}
-(
 # So that errors don't compound we exit on any errors so you see only the
 # first error that occured.
 trap failed ERR
@@ -722,26 +722,3 @@ $NOVA_DIR/bin/nova-manage network create --label=private_2-1 --project_id=2 --fi
 
 # Check that the left side of the above pipe succeeded
 for ret in "${PIPESTATUS[@]}"; do [ $ret -eq 0 ] || exit $ret; done
-
-(
-# Using the cloud
-# ===============
-
-# If you installed the dashboard on this server, then you should be able
-# to access the site using your browser.
-if [[ "$ENABLED_SERVICES" =~ "dash" ]]; then
-    echo "dashboard is now available at http://$HOST_IP/"
-fi
-
-# If keystone is present, you can point nova cli to this server
-if [[ "$ENABLED_SERVICES" =~ "key" ]]; then
-    echo "keystone is serving at http://$HOST_IP:5000/v2.0/"
-    echo "examples on using novaclient command line is in exercise.sh"
-    echo "the default users are: admin and demo"
-    echo "the password: $ADMIN_PASSWORD"
-fi
-
-# indicate how long this took to run (bash maintained variable 'SECONDS')
-echo "stack.sh completed in $SECONDS seconds."
-
-) | tee -a "$LOGFILE"

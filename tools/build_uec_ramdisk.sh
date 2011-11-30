@@ -50,7 +50,7 @@ source ./stackrc
 DEST=${DEST:-/opt/stack}
 
 # Ubuntu distro to install
-DIST_NAME=${DIST_NAME:-oneiric}
+DIST_NAME=${DIST_NAME:-natty}
 
 # Configure how large the VM should be
 GUEST_SIZE=${GUEST_SIZE:-2G}
@@ -189,6 +189,8 @@ echo >> $DEST/run.sh.log
 echo >> $DEST/run.sh.log
 echo "All done! Time to start clicking." >> $DEST/run.sh.log
 EOF
+
+echo "stack ALL=(ALL) NOPASSWD:ALL" >> $MNT_DIR/etc/sudoers
 
 # Make the run.sh executable
 chmod 755 $RUN_SH

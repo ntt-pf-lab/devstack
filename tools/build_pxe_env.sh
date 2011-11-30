@@ -41,7 +41,7 @@ done
 
 CFG=$DEST_DIR/pxelinux.cfg/default
 cat >$CFG <<EOF
-default menu.c32
+default devstack 
 prompt 0
 timeout 0
 
@@ -58,7 +58,7 @@ fi
 # Get image into place
 if [ ! -r $PXEDIR/stack-initrd.img ]; then
     cd $TOP_DIR
-    $PROGDIR/build_ramdisk.sh $PXEDIR/stack-initrd.img
+    $PROGDIR/build_uec_ramdisk.sh $PXEDIR/stack-initrd.img
 fi
 if [ ! -r $PXEDIR/stack-initrd.gz ]; then
     gzip -1 -c $PXEDIR/stack-initrd.img >$PXEDIR/stack-initrd.gz
@@ -91,7 +91,7 @@ LABEL devstack
     MENU LABEL ^devstack
     MENU DEFAULT
     KERNEL ubuntu/vmlinuz-$KVER
-    APPEND initrd=ubuntu/stack-initrd.gz ramdisk_size=2109600 root=/dev/ram0
+    APPEND initrd=ubuntu/stack-initrd.gz ramdisk_size=2109600 root=/dev/ram0 ds=nocloud 
 EOF
 
 # Get Ubuntu

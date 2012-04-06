@@ -18,6 +18,17 @@
 
 # Learn more and get the most recent version at http://devstack.org
 
+PATH=$PATH:.
+if [ -e confmodule ]; then
+	. confmodule
+else
+	. /usr/share/debconf/confmodule
+fi
+
+db_version 2.0
+#db_capb backup
+db_capb escape
+db_settitle devstack/title
 
 # Sanity Check
 # ============
@@ -26,14 +37,19 @@
 # installation with ``FORCE=yes ./stack``
 DISTRO=$(lsb_release -c -s)
 
-if [[ ! ${DISTRO} =~ (oneiric|precise) ]]; then
-    echo "WARNING: this script has only been tested on oneiric"
-    if [[ "$FORCE" != "yes" ]]; then
-        echo "If you wish to run this script anyway run with FORCE=yes"
-        exit 1
-    fi
-fi
-
+#if [[ ! ${DISTRO} =~ (oneiric|precise) ]]; then
+#    echo "WARNING: this script has only been tested on oneiric"
+#    if [[ "$FORCE" != "yes" ]]; then
+#        echo "If you wish to run this script anyway run with FORCE=yes"
+#        exit 1
+#    fi
+     db_input high devstack/force_yes || true
+     db_go
+     db_get devstack/force_yes
+     test "$RET" = "false" && exit 1
+     db_go
+#fi
+exit
 # Keep track of the current devstack directory.
 TOP_DIR=$(cd $(dirname "$0") && pwd)
 

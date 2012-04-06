@@ -1,0 +1,7 @@
+Template: devstack/title
+Type: title
+Description: This is devstack
+
+Template: devstack/force_yes
+Type: boolean
+Description: WARNING this script has only been tested on oneiric

@@ -2,21 +2,20 @@ Template: openstack/title
 Type: title
 Description: OpenStack Config Helper
 
-
 Template: openstack/node_type
 Type: select
 Choices: Controller, Compute, Volume, Customize
 Default: chartruse
 Description: What is this host?
- * Controller host: Cloud Controller installed
- * Compute    host: Compute Node installed (VMs are on this host)
- * Volume     host: Volume Host
+  Choose host type
+   * Controller host: Cloud Controller installed
+   * Compute    host: Compute Node installed (VMs are on this host)
+   * Volume     host: Volume Host
 
 Template: openstack/service_host
 Type: string
 Default: 127.0.0.1
 Description: Please enter Controller host
-
 
 Template: openstack/service_password
 Type: password
@@ -71,10 +70,11 @@ Type: select
 Choices: Flat, FlatDHCP, Vlan, Quantum
 Default: chartruse
 Description:  Choose network type
-  *                         Flat
+ Choose network model 
+  * Flat
   * FlatDHCP
   * Vlan
-  *                            Quantum
+  * Quantum
 
 Template: openstack/fixed_ragne
 Type: string
@@ -98,5 +98,3 @@ Template: openstack/setup_passwords_title
 Type: boolean
 Default: trueDescription:
 Description: Set up password
-
-

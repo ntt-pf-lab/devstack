@@ -1,0 +1,10 @@
+Package: openstack-installer
+Version: 0.10
+Section: main
+Priority: optional
+Architecture: all
+Depends:git 
+Installed-Size:
+Maintainer: Nachi Ueno
+Description: A metapackage for OpenStack installation
+ This is config helper package for OpenStack based on reference archtecure. 

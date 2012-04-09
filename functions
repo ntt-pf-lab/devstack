@@ -200,7 +200,7 @@ function iniget() {
     local section=$2
     local option=$3
     local line
-    line=$(sed -ne "/^\[$section\]/,/^\[.*\]/ { /^$option[ \t]*=/ p; }" $file)
+    line=$(sudo sed -ne "/^\[$section\]/,/^\[.*\]/ { /^$option[ \t]*=/ p; }" $file)
     echo ${line#*=}
 }
 
@@ -212,18 +212,18 @@ function iniset() {
     local section=$2
     local option=$3
     local value=$4
-    if ! grep -q "^\[$section\]" $file; then
+    if ! sudo grep -q "^\[$section\]" $file; then
         # Add section at the end
-        echo -e "\n[$section]" >>$file
+        sudo bash -c "echo -e '\n["$section"]' >>$file"
     fi
     if [[ -z "$(iniget $file $section $option)" ]]; then
         # Add it
-        sed -i -e "/^\[$section\]/ a\\
+        sudo sed -i -e "/^\[$section\]/ a\\
 $option = $value
 " $file
     else
         # Replace it
-        sed -i -e "/^\[$section\]/,/^\[.*\]/ s|^\($option[ \t]*=[ \t]*\).*$|\1$value|" $file
+        sudo sed -i -e "/^\[$section\]/,/^\[.*\]/ s|^\($option[ \t]*=[ \t]*\).*$|\1$value|" $file
     fi
 }
 

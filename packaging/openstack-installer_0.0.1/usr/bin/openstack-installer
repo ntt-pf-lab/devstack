@@ -1,0 +1,4 @@
+#!/bin/bash
+
+set -e
+/opt/stack/devstack/packaging/install.sh

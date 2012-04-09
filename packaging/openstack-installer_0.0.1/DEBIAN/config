@@ -1,0 +1,122 @@
+#!/bin/sh -e
+# Demo config module. This is more a regression/stress test than anything.
+
+# Note this stanza is only here to make this script work in an uninstalled
+# debconf source tree, and is not needed in production code.
+export PATH=$PATH:/sbin:/usr/sbin:/bin:/usr/bin
+
+case "$1" in
+  configure|reconfigure)
+    break;
+  ;;
+  *)
+    echo "config called with unknown argument \`$1'" >&2
+    exit 1
+  ;;
+esac
+
+if [ -e confmodule ]; then
+        . confmodule
+else
+        . /usr/share/debconf/confmodule
+fi
+
+db_version 2.0
+#db_capb backup
+db_capb escape
+db_settitle openstack/title
+
+# This implements a simple state machine so the back button can be handled.
+STATE=1
+CUSTOM_MODE="False"
+while [ "$STATE" != 0 -a "$STATE" != 10 ]; do
+        case $STATE in
+        1)
+                db_input high openstack/node_type || true
+                db_go
+                db_get openstack/node_type
+                case $RET in
+                   Controller)
+                       db_set openstack/enabled_services "g-api, g-reg, key, n-api, n-crt, n-obj, n-sch, n-novnc, n-xvnc, n-cauth, horizon, mysql, rabbit" 
+                   ;;
+                   Compute)
+                       db_set openstack/enabled_services "n-cpu, n-net, n-novnc , n-xvnc"
+                   ;;
+                   Volume)
+                       db_set openstack/enabled_services "n-vol"
+                   ;;
+                   Customize)
+                       CUSTOM_MODE="True"
+                       db_input high openstack/enabled_services
+                   ;; 
+                esac
+        ;;
+        2)
+                if [ "$CUSTOM_MODE" = "True" ];then
+                    db_input high openstack/glance_host || true
+                    db_input high openstack/keystone_host || true
+                else
+                    db_input high openstack/service_host || true
+                    db_go
+                    db_get openstack/service_host
+                    SERVICE_HOST=$RET
+                fi
+        ;;
+        3)
+                db_input critical openstack/service_password || true
+                db_input critical openstack/admin_password || true
+        ;;
+        4)
+                db_beginblock
+                if [ "$CUSTOM_MODE" = "True" ];then
+                    db_input high openstack/mysql_host || true
+                else
+                    db_set high openstack/mysql_host $SERVICE_HOST
+                fi
+                db_input high openstack/mysql_user || true
+                db_input high openstack/mysql_password || true
+                db_endblock
+        ;;
+        5)
+                db_beginblock
+                if [ "$CUSTOM_MODE" = "True" ];then
+                   db_input high openstack/rabbit_host || true
+                else 
+                   db_set high openstack/rabbit_host $SERVICE_HOST 
+                fi
+                db_input high openstack/rabbit_user || true
+                db_input high openstack/rabbit_password || true
+                db_endblock
+        ;;
+        6)
+                db_input high openstack/libvirt_type || true
+                db_input high openstack/net_man || true
+                db_go
+                db_input high openstack/public_interface || true
+                db_get openstack/net_man
+                if [ "$RET" = "VlanManager" ]; then
+                    interfaces=`ifconfig -s | tail -n +2 | grep -v lo | awk {'print $1'} | xargs echo -n | sed "s/ /, /g"`
+                    db_subst openstack/vlan_interface interfaces $interfaces
+                    db_input high openstack/vlan_interface
+                fi
+                db_input high openstack/fixed_ragne || true
+                db_input high openstack/floating_range  || true
+        ;;
+        7)
+                db_input high  openstack/setup_database || true
+        ;;
+        8)
+                db_input high openstack/note || true
+        ;;
+        esac
+        if db_go; then
+                STATE=$(($STATE + 1))
+        else
+                STATE=$(($STATE - 1))
+        fi
+#       echo "ON STATE: $STATE"
+done
+
+db_stop
+
+exit 0

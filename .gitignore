@@ -4,3 +4,5 @@ proto
 src
 localrc
 local.sh
+*.deb
+packaging/openstack-insatller*/opt/stack/*

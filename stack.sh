@@ -86,6 +86,8 @@ source ./stackrc
 # Destination path for installation ``DEST``
 DEST=${DEST:-/opt/stack}
 
+# Using package installation
+PACKAGE_MODE=${PACKAGE_MODE:-False}
 # Check to see if we are already running a stack.sh
 if type -p screen >/dev/null && screen -ls | egrep -q "[0-9].stack"; then
     echo "You are already running a stack.sh session."
@@ -175,6 +177,13 @@ QUANTUM_DIR=$DEST/quantum
 QUANTUM_CLIENT_DIR=$DEST/python-quantumclient
 MELANGE_DIR=$DEST/melange
 MELANGECLIENT_DIR=$DEST/python-melangeclient
+
+NOVA_MANAGE=$NOVA_DIR/bin/nova-manage
+KEYSTONE_MANAGE=$KEYSTONE_DIR/bin/keystone-manage
+if [[ "$PACKAGE_MODE" = "True" ]];then
+    NOVA_MANAGE="sudo nova-manage"
+    KEYSTONE_MANAGE="sudo keystone-manage"
+fi
 
 # Default Quantum Plugin
 Q_PLUGIN=${Q_PLUGIN:-openvswitch}
@@ -589,90 +598,191 @@ function get_packages() {
     done
 }
 
-# install apt requirements
-apt_get update
-install_package $(get_packages $FILES/apts)
+function package_name() {
+    RET=''
+    case $1 in
+        g-api)
+            RET='glance'
+        ;;
+        g-reg)
+            RET='glance'
+        ;;
+        key)
+            RET='keystone'
+        ;;
+        n-api)
+            RET='nova-api' 
+        ;;
+        n-cpu)
+            if [[ "$LIBVIRT_TYPE" == "kvm" ]]; then
+                RET='nova-compute-kvm'
+            elif [[ "$LIBVIRT_TYPE" == "lxc" ]]; then
+                RET='nova-compute-lxc'
+            else
+                RET='nova-compute'
+            fi  
+        ;;
+        n-net)
+            RET='nova-network'
+        ;;
+        n-vol)
+            RET='nova-volume'
+        ;;
+        n-sch)
+            RET='nova-scheduler'
+        ;;
+        n-novnc)
+            RET='nova-vncproxy'
+        ;;
+        horizon)
+            RET='openstack-dashboard'
+        ;;
+    esac
+}
 
-# install python requirements
-pip_install $(get_packages $FILES/pips | sort -u)
+function service_name(){
+    case $1 in
+        g-reg)
+            RET='glance-registry'
+        ;;
+        g-api)
+            RET='glance-api'
+        ;;
+        horizon)
+            RET='apache2'
+        ;;
+        *)
+            package_name $1
+        ;;
+    esac
+}
 
-# compute service
-git_clone $NOVA_REPO $NOVA_DIR $NOVA_BRANCH
-# python client library to nova that horizon (and others) use
-git_clone $KEYSTONECLIENT_REPO $KEYSTONECLIENT_DIR $KEYSTONECLIENT_BRANCH
-git_clone $NOVACLIENT_REPO $NOVACLIENT_DIR $NOVACLIENT_BRANCH
+function install_openstack_package() {
+    package_name $1
+    if [ "$RET" = '' ];then
+        return 0 
+    fi
+    install_package $RET
+    return 0
+}
 
-# glance, swift middleware and nova api needs keystone middleware
-if is_service_enabled key g-api n-api swift; then
-    # unified auth system (manages accounts/tokens)
-    git_clone $KEYSTONE_REPO $KEYSTONE_DIR $KEYSTONE_BRANCH
-fi
-if is_service_enabled swift; then
-    # storage service
-    git_clone $SWIFT_REPO $SWIFT_DIR $SWIFT_BRANCH
-fi
-if is_service_enabled g-api n-api; then
-    # image catalog service
-    git_clone $GLANCE_REPO $GLANCE_DIR $GLANCE_BRANCH
-fi
-if is_service_enabled n-novnc; then
-    # a websockets/html5 or flash powered VNC console for vm instances
-    git_clone $NOVNC_REPO $NOVNC_DIR $NOVNC_BRANCH
-fi
-if is_service_enabled horizon; then
-    # django powered web control panel for openstack
-    git_clone $HORIZON_REPO $HORIZON_DIR $HORIZON_BRANCH $HORIZON_TAG
-fi
-if is_service_enabled quantum; then
-    git_clone $QUANTUM_CLIENT_REPO $QUANTUM_CLIENT_DIR $QUANTUM_CLIENT_BRANCH
-fi
-if is_service_enabled q-svc; then
-    # quantum
-    git_clone $QUANTUM_REPO $QUANTUM_DIR $QUANTUM_BRANCH
-fi
-if is_service_enabled m-svc; then
-    # melange
-    git_clone $MELANGE_REPO $MELANGE_DIR $MELANGE_BRANCH
-fi
+if [[ "$PACKAGE_MODE" = "True" ]];then
+    apt_get update
+    sudo apt-get install python-novaclient -y --force-yes
+    for srv in ${ENABLED_SERVICES//,/ };do
+        install_openstack_package $srv
+    done
+    if is_service_enabled quantum; then
+        git_clone $QUANTUM_CLIENT_REPO $QUANTUM_CLIENT_DIR $QUANTUM_CLIENT_BRANCH
+    fi
+    if is_service_enabled q-svc; then
+        # quantum
+        git_clone $QUANTUM_REPO $QUANTUM_DIR $QUANTUM_BRANCH
+    fi
+    if is_service_enabled m-svc; then
+        # melange
+        git_clone $MELANGE_REPO $MELANGE_DIR $MELANGE_BRANCH
+    fi
+    if is_service_enabled melange; then
+        git_clone $MELANGECLIENT_REPO $MELANGECLIENT_DIR $MELANGECLIENT_BRANCH
+    fi
+    if is_service_enabled quantum; then
+        cd $QUANTUM_CLIENT_DIR; sudo python setup.py develop
+    fi
+    if is_service_enabled q-svc; then
+        cd $QUANTUM_DIR; sudo python setup.py develop
+    fi
+    if is_service_enabled m-svc; then
+        cd $MELANGE_DIR; sudo python setup.py develop
+    fi
+    if is_service_enabled melange; then
+        cd $MELANGECLIENT_DIR; sudo python setup.py develop
+    fi
+else
+    # install apt requirements
+    apt_get update
+    install_package $(get_packages $FILES/apts)
+    
+    # install python requirements
+    pip_install $(get_packages $FILES/pips | sort -u)
+    
+    # compute service
+    git_clone $NOVA_REPO $NOVA_DIR $NOVA_BRANCH
+    # python client library to nova that horizon (and others) use
+    git_clone $KEYSTONECLIENT_REPO $KEYSTONECLIENT_DIR $KEYSTONECLIENT_BRANCH
+    git_clone $NOVACLIENT_REPO $NOVACLIENT_DIR $NOVACLIENT_BRANCH
+    
+    # glance, swift middleware and nova api needs keystone middleware
+    if is_service_enabled key g-api n-api swift; then
+        # unified auth system (manages accounts/tokens)
+        git_clone $KEYSTONE_REPO $KEYSTONE_DIR $KEYSTONE_BRANCH
+    fi
+    if is_service_enabled swift; then
+        # storage service
+        git_clone $SWIFT_REPO $SWIFT_DIR $SWIFT_BRANCH
+    fi
+    if is_service_enabled g-api n-api; then
+        # image catalog service
+        git_clone $GLANCE_REPO $GLANCE_DIR $GLANCE_BRANCH
+    fi
+    if is_service_enabled n-novnc; then
+        # a websockets/html5 or flash powered VNC console for vm instances
+        git_clone $NOVNC_REPO $NOVNC_DIR $NOVNC_BRANCH
+    fi
+    if is_service_enabled horizon; then
+        # django powered web control panel for openstack
+        git_clone $HORIZON_REPO $HORIZON_DIR $HORIZON_BRANCH $HORIZON_TAG
+    fi
+    if is_service_enabled quantum; then
+        git_clone $QUANTUM_CLIENT_REPO $QUANTUM_CLIENT_DIR $QUANTUM_CLIENT_BRANCH
+    fi
+    if is_service_enabled q-svc; then
+        # quantum
+        git_clone $QUANTUM_REPO $QUANTUM_DIR $QUANTUM_BRANCH
+    fi
+    if is_service_enabled m-svc; then
+        # melange
+        git_clone $MELANGE_REPO $MELANGE_DIR $MELANGE_BRANCH
+    fi
+    
+    if is_service_enabled melange; then
+        git_clone $MELANGECLIENT_REPO $MELANGECLIENT_DIR $MELANGECLIENT_BRANCH
+    fi
 
-if is_service_enabled melange; then
-    git_clone $MELANGECLIENT_REPO $MELANGECLIENT_DIR $MELANGECLIENT_BRANCH
+    # Initialization
+    # ==============
+    
+    # setup our checkouts so they are installed into python path
+    # allowing ``import nova`` or ``import glance.client``
+    cd $KEYSTONECLIENT_DIR; sudo python setup.py develop
+    cd $NOVACLIENT_DIR; sudo python setup.py develop
+    if is_service_enabled key g-api n-api swift; then
+        cd $KEYSTONE_DIR; sudo python setup.py develop
+    fi
+    if is_service_enabled swift; then
+        cd $SWIFT_DIR; sudo python setup.py develop
+    fi
+    if is_service_enabled g-api n-api; then
+        cd $GLANCE_DIR; sudo python setup.py develop
+    fi
+    cd $NOVA_DIR; sudo python setup.py develop
+    if is_service_enabled horizon; then
+        cd $HORIZON_DIR; sudo python setup.py develop
+    fi
+    if is_service_enabled quantum; then
+        cd $QUANTUM_CLIENT_DIR; sudo python setup.py develop
+    fi
+    if is_service_enabled q-svc; then
+        cd $QUANTUM_DIR; sudo python setup.py develop
+    fi
+    if is_service_enabled m-svc; then
+        cd $MELANGE_DIR; sudo python setup.py develop
+    fi
+    if is_service_enabled melange; then
+        cd $MELANGECLIENT_DIR; sudo python setup.py develop
+    fi
+    
 fi
-
-
-# Initialization
-# ==============
-
-# setup our checkouts so they are installed into python path
-# allowing ``import nova`` or ``import glance.client``
-cd $KEYSTONECLIENT_DIR; sudo python setup.py develop
-cd $NOVACLIENT_DIR; sudo python setup.py develop
-if is_service_enabled key g-api n-api swift; then
-    cd $KEYSTONE_DIR; sudo python setup.py develop
-fi
-if is_service_enabled swift; then
-    cd $SWIFT_DIR; sudo python setup.py develop
-fi
-if is_service_enabled g-api n-api; then
-    cd $GLANCE_DIR; sudo python setup.py develop
-fi
-cd $NOVA_DIR; sudo python setup.py develop
-if is_service_enabled horizon; then
-    cd $HORIZON_DIR; sudo python setup.py develop
-fi
-if is_service_enabled quantum; then
-    cd $QUANTUM_CLIENT_DIR; sudo python setup.py develop
-fi
-if is_service_enabled q-svc; then
-    cd $QUANTUM_DIR; sudo python setup.py develop
-fi
-if is_service_enabled m-svc; then
-    cd $MELANGE_DIR; sudo python setup.py develop
-fi
-if is_service_enabled melange; then
-    cd $MELANGECLIENT_DIR; sudo python setup.py develop
-fi
-
 
 # Syslog
 # ------
@@ -774,21 +884,26 @@ function screen_rc {
 function screen_it {
     NL=`echo -ne '\015'`
     if is_service_enabled $1; then
-        # Append the service to the screen rc file
-        screen_rc "$1" "$2"
+        service_name $1
+        if [ "$RET" != '' -a "$PACKAGE_MODE" = "True" ];then
+            restart_service $RET
+        else
+            # Append the service to the screen rc file
+            screen_rc "$1" "$2"
 
-        screen -S stack -X screen -t $1
-        # sleep to allow bash to be ready to be send the command - we are
-        # creating a new window in screen and then sends characters, so if
-        # bash isn't running by the time we send the command, nothing happens
-        sleep 1.5
+            screen -S stack -X screen -t $1
+            # sleep to allow bash to be ready to be send the command - we are
+            # creating a new window in screen and then sends characters, so if
+            # bash isn't running by the time we send the command, nothing happens
+            sleep 1.5
 
-        if [[ -n ${SCREEN_LOGDIR} ]]; then
-            screen -S stack -p $1 -X logfile ${SCREEN_LOGDIR}/screen-${1}.${CURRENT_LOG_TIME}.log
-            screen -S stack -p $1 -X log on
-            ln -sf ${SCREEN_LOGDIR}/screen-${1}.${CURRENT_LOG_TIME}.log ${SCREEN_LOGDIR}/screen-${1}.log
+            if [[ -n ${SCREEN_LOGDIR} ]]; then
+                screen -S stack -p $1 -X logfile ${SCREEN_LOGDIR}/screen-${1}.${CURRENT_LOG_TIME}.log
+                screen -S stack -p $1 -X log on
+                ln -sf ${SCREEN_LOGDIR}/screen-${1}.${CURRENT_LOG_TIME}.log ${SCREEN_LOGDIR}/screen-${1}.log
+            fi
+            screen -S stack -p $1 -X stuff "$2$NL"
         fi
-        screen -S stack -p $1 -X stuff "$2$NL"
     fi
 }
 
@@ -804,34 +919,34 @@ screen -r stack -X hardstatus alwayslastline "$SCREEN_HARDSTATUS"
 # Setup the django horizon application to serve via apache/wsgi
 
 if is_service_enabled horizon; then
+    if [[ "$PACKAGE_MODE" != "True" ]];then
+        # Install apache2, which is NOPRIME'd
+        install_package apache2 libapache2-mod-wsgi
 
-    # Install apache2, which is NOPRIME'd
-    install_package apache2 libapache2-mod-wsgi
+        # Remove stale session database.
+        rm -f $HORIZON_DIR/openstack_dashboard/local/dashboard_openstack.sqlite3
 
+        # ``local_settings.py`` is used to override horizon default settings.
+        local_settings=$HORIZON_DIR/openstack_dashboard/local/local_settings.py
+        cp $FILES/horizon_settings.py $local_settings
 
-    # Remove stale session database.
-    rm -f $HORIZON_DIR/openstack_dashboard/local/dashboard_openstack.sqlite3
+        # Initialize the horizon database (it stores sessions and notices shown to
+        # users).  The user system is external (keystone).
+        cd $HORIZON_DIR
+        python manage.py syncdb
 
-    # ``local_settings.py`` is used to override horizon default settings.
-    local_settings=$HORIZON_DIR/openstack_dashboard/local/local_settings.py
-    cp $FILES/horizon_settings.py $local_settings
+        # create an empty directory that apache uses as docroot
+        sudo mkdir -p $HORIZON_DIR/.blackhole
 
-    # Initialize the horizon database (it stores sessions and notices shown to
-    # users).  The user system is external (keystone).
-    cd $HORIZON_DIR
-    python manage.py syncdb
-
-    # create an empty directory that apache uses as docroot
-    sudo mkdir -p $HORIZON_DIR/.blackhole
-
-    ## Configure apache's 000-default to run horizon
-    sudo cp $FILES/000-default.template /etc/apache2/sites-enabled/000-default
-    sudo sed -e "
-        s,%USER%,$APACHE_USER,g;
-        s,%GROUP%,$APACHE_GROUP,g;
-        s,%HORIZON_DIR%,$HORIZON_DIR,g;
-    " -i /etc/apache2/sites-enabled/000-default
-    restart_service apache2
+        ## Configure apache's 000-default to run horizon
+        sudo cp $FILES/000-default.template /etc/apache2/sites-enabled/000-default
+        sudo sed -e "
+            s,%USER%,$APACHE_USER,g;
+            s,%GROUP%,$APACHE_GROUP,g;
+            s,%HORIZON_DIR%,$HORIZON_DIR,g;
+        " -i /etc/apache2/sites-enabled/000-default
+        restart_service apache2
+    fi
 fi
 
 
@@ -843,14 +958,21 @@ if is_service_enabled g-reg; then
     if [[ ! -d $GLANCE_CONF_DIR ]]; then
         sudo mkdir -p $GLANCE_CONF_DIR
     fi
-    sudo chown `whoami` $GLANCE_CONF_DIR
+    if [ "$PACKAGE_MODE" = "True" ]; then
+       sudo chown glance.glance $GLANCE_CONF_DIR
+    else
+       sudo chown `whoami` $GLANCE_CONF_DIR
+    fi
     GLANCE_IMAGE_DIR=$DEST/glance/images
     # Delete existing images
-    rm -rf $GLANCE_IMAGE_DIR
+    sudo rm -rf $GLANCE_IMAGE_DIR
 
     # Use local glance directories
     mkdir -p $GLANCE_IMAGE_DIR
-
+    if [ "$PACKAGE_MODE" = "True" ]; then
+       sudo chown glance.glance $GLANCE_IMAGE_DIR 
+    fi 
+ 
     # (re)create glance database
     mysql -u$MYSQL_USER -p$MYSQL_PASSWORD -e 'DROP DATABASE IF EXISTS glance;'
     mysql -u$MYSQL_USER -p$MYSQL_PASSWORD -e 'CREATE DATABASE glance CHARACTER SET utf8;'
@@ -876,22 +998,22 @@ if is_service_enabled g-reg; then
 
     # Copy over our glance configurations and update them
     GLANCE_REGISTRY_CONF=$GLANCE_CONF_DIR/glance-registry.conf
-    cp $FILES/glance-registry.conf $GLANCE_REGISTRY_CONF
+    sudo cp $FILES/glance-registry.conf $GLANCE_REGISTRY_CONF
     glance_config $GLANCE_REGISTRY_CONF
 
     if [[ -e $FILES/glance-registry-paste.ini ]]; then
         GLANCE_REGISTRY_PASTE_INI=$GLANCE_CONF_DIR/glance-registry-paste.ini
-        cp $FILES/glance-registry-paste.ini $GLANCE_REGISTRY_PASTE_INI
+        sudo cp $FILES/glance-registry-paste.ini $GLANCE_REGISTRY_PASTE_INI
         glance_config $GLANCE_REGISTRY_PASTE_INI
     fi
 
     GLANCE_API_CONF=$GLANCE_CONF_DIR/glance-api.conf
-    cp $FILES/glance-api.conf $GLANCE_API_CONF
+    sudo cp $FILES/glance-api.conf $GLANCE_API_CONF
     glance_config $GLANCE_API_CONF
 
     if [[ -e $FILES/glance-api-paste.ini ]]; then
         GLANCE_API_PASTE_INI=$GLANCE_CONF_DIR/glance-api-paste.ini
-        cp $FILES/glance-api-paste.ini $GLANCE_API_PASTE_INI
+        sudo cp $FILES/glance-api-paste.ini $GLANCE_API_PASTE_INI
         glance_config $GLANCE_API_PASTE_INI
     fi
 fi
@@ -987,7 +1109,13 @@ NOVA_CONF_DIR=/etc/nova
 if [[ ! -d $NOVA_CONF_DIR ]]; then
     sudo mkdir -p $NOVA_CONF_DIR
 fi
-sudo chown `whoami` $NOVA_CONF_DIR
+
+
+if [ "$PACKAGE_MODE" = "True" ]; then
+   sudo chown nova.nova $NOVA_CONF_DIR
+else
+   sudo chown `whoami` $NOVA_CONF_DIR
+fi
 
 if is_service_enabled n-api; then
     # Use the sample http middleware configuration supplied in the
@@ -998,15 +1126,19 @@ if is_service_enabled n-api; then
     # NOTE: Set API_RATE_LIMIT="False" to turn OFF rate limiting
     API_RATE_LIMIT=${API_RATE_LIMIT:-"True"}
 
-    # Remove legacy paste config if present
-    rm -f $NOVA_DIR/bin/nova-api-paste.ini
+    if [[ "$PACKAGE_MODE" != "True" ]];then
 
-    # Get the sample configuration file in place
-    cp $NOVA_DIR/etc/nova/api-paste.ini $NOVA_CONF_DIR
+      # Remove legacy paste config if present
+      rm -f $NOVA_DIR/bin/nova-api-paste.ini
+
+      # Get the sample configuration file in place
+      sudo cp $NOVA_DIR/etc/nova/api-paste.ini $NOVA_CONF_DIR
+    
+    fi
 
     # Rewrite the authtoken configration for our Keystone service.
     # This is a bit defensive to allow the sample file some varaince.
-    sed -e "
+    sudo sed -e "
         /^admin_token/i admin_tenant_name = $SERVICE_TENANT_NAME
         /admin_tenant_name/s/^.*$/admin_tenant_name = $SERVICE_TENANT_NAME/;
         /admin_user/s/^.*$/admin_user = nova/;
@@ -1197,7 +1329,7 @@ if is_service_enabled swift; then
 
    # We do the install of the proxy-server and swift configuration
    # replacing a few directives to match our configuration.
-   sed -e "
+   sudo sed -e "
        s,%SWIFT_CONFIG_LOCATION%,${SWIFT_CONFIG_LOCATION},g;
        s,%USER%,$USER,g;
        s,%SERVICE_TENANT_NAME%,$SERVICE_TENANT_NAME,g;
@@ -1215,7 +1347,7 @@ if is_service_enabled swift; then
     " $FILES/swift/proxy-server.conf | \
        sudo tee  ${SWIFT_CONFIG_LOCATION}/proxy-server.conf
 
-   sed -e "s/%SWIFT_HASH%/$SWIFT_HASH/" $FILES/swift/swift.conf > ${SWIFT_CONFIG_LOCATION}/swift.conf
+   sudo sed -e "s/%SWIFT_HASH%/$SWIFT_HASH/" $FILES/swift/swift.conf > ${SWIFT_CONFIG_LOCATION}/swift.conf
 
    # We need to generate a object/account/proxy configuration
    # emulating 4 nodes on different ports we have a little function
@@ -1228,7 +1360,7 @@ if is_service_enabled swift; then
 
        for node_number in $(seq ${SWIFT_REPLICAS}); do
            node_path=${SWIFT_DATA_LOCATION}/${node_number}
-           sed -e "s,%SWIFT_CONFIG_LOCATION%,${SWIFT_CONFIG_LOCATION},;s,%USER%,$USER,;s,%NODE_PATH%,${node_path},;s,%BIND_PORT%,${bind_port},;s,%LOG_FACILITY%,${log_facility}," \
+           sudo sed -e "s,%SWIFT_CONFIG_LOCATION%,${SWIFT_CONFIG_LOCATION},;s,%USER%,$USER,;s,%NODE_PATH%,${node_path},;s,%BIND_PORT%,${bind_port},;s,%LOG_FACILITY%,${log_facility}," \
                $FILES/swift/${server_type}-server.conf > ${SWIFT_CONFIG_LOCATION}/${server_type}-server/${node_number}.conf
            bind_port=$(( ${bind_port} + 10 ))
            log_facility=$(( ${log_facility} + 1 ))
@@ -1245,7 +1377,7 @@ if is_service_enabled swift; then
    rm -rf ${swift_log_dir}
    mkdir -p ${swift_log_dir}/hourly
    sudo chown -R syslog:adm ${swift_log_dir}
-   sed "s,%SWIFT_LOGDIR%,${swift_log_dir}," $FILES/swift/rsyslog.conf | sudo \
+   sudo sed "s,%SWIFT_LOGDIR%,${swift_log_dir}," $FILES/swift/rsyslog.conf | sudo \
        tee /etc/rsyslog.d/10-swift.conf
    sudo restart rsyslog
 
@@ -1342,19 +1474,29 @@ fi
 
 NOVA_CONF=nova.conf
 function add_nova_opt {
-    echo "$1" >> $NOVA_CONF_DIR/$NOVA_CONF
+    sudo bash -c "echo $1 >> $NOVA_CONF_DIR/$NOVA_CONF"
 }
 
 # remove legacy nova.conf
-rm -f $NOVA_DIR/bin/nova.conf
+sudo rm -f $NOVA_DIR/bin/nova.conf
 
 # (re)create nova.conf
-rm -f $NOVA_CONF_DIR/$NOVA_CONF
+sudo rm -f $NOVA_CONF_DIR/$NOVA_CONF
 add_nova_opt "[DEFAULT]"
 add_nova_opt "verbose=True"
 add_nova_opt "auth_strategy=keystone"
 add_nova_opt "allow_resize_to_same_host=True"
-add_nova_opt "root_helper=sudo /usr/local/bin/nova-rootwrap"
+
+if [[ "$PACKAGE_MODE" = "True" ]];then
+    add_nova_opt "root_helper=sudo nova-rootwrap"
+    add_nova_opt "state_path=/var/lib/nova/"
+    add_nova_opt "lock_path=/var/lib/nova/"
+    add_nova_opt "logdir=/var/log/nova/"
+    add_nova_opt "dhcpbridge=nova-dhcpbridge"
+else
+    add_nova_opt "root_helper=sudo /usr/local/bin/nova-rootwrap"
+fi
+
 add_nova_opt "compute_scheduler_driver=$SCHEDULER"
 add_nova_opt "dhcpbridge_flagfile=$NOVA_CONF_DIR/$NOVA_CONF"
 add_nova_opt "fixed_range=$FIXED_RANGE"
@@ -1437,6 +1579,7 @@ if [ "$API_RATE_LIMIT" != "True" ]; then
 fi
 
 
+
 # Provide some transition from EXTRA_FLAGS to EXTRA_OPTS
 if [[ -z "$EXTRA_OPTS" && -n "$EXTRA_FLAGS" ]]; then
     EXTRA_OPTS=$EXTRA_FLAGS
@@ -1483,7 +1626,7 @@ if is_service_enabled mysql && is_service_enabled nova; then
     mysql -u$MYSQL_USER -p$MYSQL_PASSWORD -e 'CREATE DATABASE nova;'
 
     # (re)create nova database
-    $NOVA_DIR/bin/nova-manage db sync
+    $NOVA_MANAGE db sync
 fi
 
 
@@ -1517,25 +1660,28 @@ if is_service_enabled key; then
     KEYSTONE_CONF_DIR=${KEYSTONE_CONF_DIR:-/etc/keystone}
     KEYSTONE_CONF=$KEYSTONE_CONF_DIR/keystone.conf
     KEYSTONE_CATALOG=$KEYSTONE_CONF_DIR/default_catalog.templates
-
-    if [[ ! -d $KEYSTONE_CONF_DIR ]]; then
-        sudo mkdir -p $KEYSTONE_CONF_DIR
-        sudo chown `whoami` $KEYSTONE_CONF_DIR
-    fi
-
-    if [[ "$KEYSTONE_CONF_DIR" != "$KEYSTONE_DIR/etc" ]]; then
-        # FIXME(dtroyer): etc/keystone.conf causes trouble if the config files
-        #                 are located anywhere else (say, /etc/keystone).
-        #                 LP 966670 fixes this in keystone, we fix it
-        #                 here until the bug fix is committed.
-        if [[ -r $KEYSTONE_DIR/etc/keystone.conf ]]; then
-            # Get the sample config file out of the way
-            mv $KEYSTONE_DIR/etc/keystone.conf $KEYSTONE_DIR/etc/keystone.conf.sample
+    
+    if [[ "$PACKAGE_MODE" != "True" ]];then
+        if [[ ! -d $KEYSTONE_CONF_DIR ]]; then
+            sudo mkdir -p $KEYSTONE_CONF_DIR
+            sudo chown `whoami` $KEYSTONE_CONF_DIR
         fi
-        cp -p $KEYSTONE_DIR/etc/keystone.conf.sample $KEYSTONE_CONF
-        cp -p $KEYSTONE_DIR/etc/policy.json $KEYSTONE_CONF_DIR
+
+        if [[ "$KEYSTONE_CONF_DIR" != "$KEYSTONE_DIR/etc" ]]; then
+            # FIXME(dtroyer): etc/keystone.conf causes trouble if the config files
+            #                 are located anywhere else (say, /etc/keystone).
+            #                 LP 966670 fixes this in keystone, we fix it
+            #                 here until the bug fix is committed.
+            if [[ -r $KEYSTONE_DIR/etc/keystone.conf ]]; then
+                # Get the sample config file out of the way
+                mv $KEYSTONE_DIR/etc/keystone.conf $KEYSTONE_DIR/etc/keystone.conf.sample
+            fi
+            sudo cp -p $KEYSTONE_DIR/etc/keystone.conf.sample $KEYSTONE_CONF
+            sudo cp -p $KEYSTONE_DIR/etc/policy.json $KEYSTONE_CONF_DIR
+        fi
     fi
-    cp -p $FILES/default_catalog.templates $KEYSTONE_CATALOG
+
+    sudo cp -p $FILES/default_catalog.templates $KEYSTONE_CATALOG
 
     # Rewrite stock keystone.conf:
     iniset $KEYSTONE_CONF DEFAULT admin_token "$SERVICE_TOKEN"
@@ -1545,7 +1691,7 @@ if is_service_enabled key; then
     # Configure keystone.conf to use templates
     iniset $KEYSTONE_CONF catalog driver "keystone.catalog.backends.templated.TemplatedCatalog"
     iniset $KEYSTONE_CONF catalog template_file "$KEYSTONE_CATALOG"
-    sed -e "
+    sudo sed -e "
         /^pipeline.*ec2_extension crud_/s|ec2_extension crud_extension|ec2_extension s3_extension crud_extension|;
     " -i $KEYSTONE_CONF
     # Append the S3 bits
@@ -1578,12 +1724,14 @@ if is_service_enabled key; then
         LOGGING_ROOT="$LOGGING_ROOT,production"
     fi
     KEYSTONE_LOG_CONFIG="--log-config $KEYSTONE_CONF_DIR/logging.conf"
-    cp $KEYSTONE_DIR/etc/logging.conf.sample $KEYSTONE_CONF_DIR/logging.conf
+    if [[ "$PACKAGE_MODE" != "True" ]];then
+        sudo cp $KEYSTONE_DIR/etc/logging.conf.sample $KEYSTONE_CONF_DIR/logging.conf
+    fi
     iniset $KEYSTONE_CONF_DIR/logging.conf logger_root level "DEBUG"
     iniset $KEYSTONE_CONF_DIR/logging.conf logger_root handlers "devel,production"
 
     # initialize keystone database
-    $KEYSTONE_DIR/bin/keystone-manage db_sync
+    $KEYSTONE_MANAGE db_sync
 
     # launch keystone and wait for it to answer before continuing
     screen_it key "cd $KEYSTONE_DIR && $KEYSTONE_DIR/bin/keystone-all --config-file $KEYSTONE_CONF $KEYSTONE_LOG_CONFIG -d --debug"
@@ -1623,13 +1771,13 @@ fi
 # happen after we've started the Quantum service.
 if is_service_enabled mysql && is_service_enabled nova; then
     # create a small network
-    $NOVA_DIR/bin/nova-manage network create private $FIXED_RANGE 1 $FIXED_NETWORK_SIZE $NETWORK_CREATE_ARGS
+    $NOVA_MANAGE network create private $FIXED_RANGE 1 $FIXED_NETWORK_SIZE $NETWORK_CREATE_ARGS
 
     # create some floating ips
-    $NOVA_DIR/bin/nova-manage floating create $FLOATING_RANGE
+    $NOVA_MANAGE floating create $FLOATING_RANGE
 
     # create a second pool
-    $NOVA_DIR/bin/nova-manage floating create --ip_range=$TEST_FLOATING_RANGE --pool=$TEST_FLOATING_POOL
+    $NOVA_MANAGE floating create --ip_range=$TEST_FLOATING_RANGE --pool=$TEST_FLOATING_POOL
 fi
 
 # Launching nova-compute should be as simple as running ``nova-compute`` but

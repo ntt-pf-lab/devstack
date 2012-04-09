@@ -5,17 +5,28 @@ Description: OpenStack Config Helper
 Template: openstack/node_type
 Type: select
 Choices: Controller, Compute, Volume, Customize
-Default: chartruse
+Default: Controller 
 Description: What is this host?
   Choose host type
    * Controller host: Cloud Controller installed
    * Compute    host: Compute Node installed (VMs are on this host)
    * Volume     host: Volume Host
+   * Customize  : Customize 
 
 Template: openstack/service_host
 Type: string
 Default: 127.0.0.1
-Description: Please enter Controller host
+Description: Please enter Controller host ip
+
+Template: openstack/glance_host
+Type: string
+Default: 127.0.0.1
+Description: Please enter Glance host ip
+
+Template: openstack/keystone_host
+Type: string
+Default: 127.0.0.1
+Description: Please enter Keystone host ip
 
 Template: openstack/service_password
 Type: password
@@ -33,7 +44,7 @@ Template: openstack/mysql_host
 Type: string
 Default: 127.0.0.1
 Description: enter a host
- Enter a mysql host
+ Enter a mysql host ${user}
 
 Template: openstack/mysql_user
 Type: string
@@ -48,8 +59,8 @@ Description: enter a password
  Enter a mysql password here.
 
 Template: openstack/rabbit_host
-Type: password
-Default: openstack
+Type: string 
+Default: 127.0.0.1
 Description: enter a password
  Enter a rabbit host.
 
@@ -59,22 +70,32 @@ Default: openstack
 Description: enter a password
  Enter a rabbit password.
 
-Template: openstack/virt_driver
+Template: openstack/libvirt_type
 Type: select
 Choices: KVM, LXC
-Default: chartruse
+Default: KVM 
 Description: Choose virtualization type
 
 Template: openstack/net_man
 Type: select
-Choices: Flat, FlatDHCP, Vlan, Quantum
-Default: chartruse
+Choices: FlatManager, FlatDHCPManager, VlanManager, QuantumManager
+Default: FlatDHCPManager 
 Description:  Choose network type
  Choose network model 
   * Flat
   * FlatDHCP
   * Vlan
   * Quantum
+
+Template: openstack/public_interface
+Type: string
+Default: br100
+Description:  Interface for public IP addresses
+
+Template: openstack/vlan_interface
+Type: select
+Choices: ${interfaces} 
+Description:  Interface for vlan
 
 Template: openstack/fixed_ragne
 Type: string
@@ -92,9 +113,15 @@ Template: openstack/setup_database
 Type: boolean
 Default: true
 Description: Do you want setup dbs?
- If yes,  this insatller cleanup db,  then setup initial settings on it.
+ Waring: If yes, databases are dropped.
 
-Template: openstack/setup_passwords_title
-Type: boolean
-Default: trueDescription:
-Description: Set up password
+Template: openstack/enabled_services
+Type: multiselect
+Choices: g-api, g-reg, key, n-api, n-crt, n-obj, n-cpu, n-net, n-vol, n-sch, n-novnc, n-xvnc, n-cauth, horizon, mysql, rabbit
+Default: g-api, g-reg, key, n-api, n-crt, n-obj, n-cpu, n-net, n-vol, n-sch, n-novnc, n-xvnc, n-cauth, horizon, mysql, rabbit
+Description: please select enabled services
+
+Template: openstack/install_note
+Type: note
+Description: Configuration and package selection is finished.
+ In order to finish installation please run openstack-install
